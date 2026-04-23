@@ -16,27 +16,25 @@ const platformKey = `${process.platform}-${process.arch}`;
 const ext = process.platform === 'win32' ? '.exe' : '';
 
 function getBinaryPath() {
-  // 1. 环境变量覆盖
   if (process.env.WECHAT_CLI_BINARY) {
     return process.env.WECHAT_CLI_BINARY;
   }
 
-  // 2. 从平台包解析
   const pkg = PLATFORM_PACKAGES[platformKey];
   if (!pkg) {
     console.error(`wechat-cli: unsupported platform ${platformKey}`);
     process.exit(1);
   }
 
-  try {
-    return require.resolve(`${pkg}/bin/wechat-cli${ext}`);
-  } catch {
-    // 3. fallback: 直接找 node_modules 下的路径
-    const modPath = path.join(
-      path.dirname(require.resolve(`${pkg}/package.json`)),
-      `bin/wechat-cli${ext}`
-    );
-    if (fs.existsSync(modPath)) return modPath;
+  const paths = [
+    path.join('/Users/joeslee/Projects/GitHub/wechat-cli/npm/platforms', platformKey, 'bin', `wechat-cli${ext}`),
+  ];
+
+  for (const p of paths) {
+    if (fs.existsSync(p)) {
+      console.error(`Using binary: ${p}`);
+      return p;
+    }
   }
 
   console.error(`wechat-cli: binary not found for ${platformKey}`);

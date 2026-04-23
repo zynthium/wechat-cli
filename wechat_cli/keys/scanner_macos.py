@@ -68,7 +68,7 @@ def _build_entitlements_xml(app_path):
 
 
 def _resign_wechat():
-    """Re-sign WeChat: 保留原有 entitlements，仅添加 get-task-allow。"""
+    """Re-sign WeChat: 先移除旧签名，再重新签名（支持非 sudo 场景）。"""
     wechat_paths = [
         "/Applications/WeChat.app",
         os.path.expanduser("~/Applications/WeChat.app"),
@@ -82,8 +82,15 @@ def _resign_wechat():
     if wechat_app is None:
         return False, "未找到 WeChat.app（已搜索 /Applications 和 ~/Applications）"
 
-    print(f"\n[*] 检测到 task_for_pid 权限不足，正在对微信重新签名...")
+    print(f"\n[*] 检测到 task_for_pid 权限不足正在对微信重新签名...")
     print(f"    目标: {wechat_app}")
+
+    # 先尝试移除旧签名（非 sudo 可能失败但无害）
+    subprocess.run(
+        ["codesign", "--remove-signature", wechat_app],
+        capture_output=True,
+        timeout=30,
+    )
 
     # 提取并合并 entitlements
     try:
