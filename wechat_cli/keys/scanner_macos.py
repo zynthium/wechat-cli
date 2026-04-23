@@ -68,7 +68,7 @@ def _build_entitlements_xml(app_path):
 
 
 def _resign_wechat():
-    """Re-sign WeChat: 先移除旧签名，再重新签名（支持非 sudo 场景）。"""
+    """Re-sign WeChat: 移除旧签名后用简化方式重新签名（保留原始权限）。"""
     wechat_paths = [
         "/Applications/WeChat.app",
         os.path.expanduser("~/Applications/WeChat.app"),
@@ -85,32 +85,18 @@ def _resign_wechat():
     print(f"\n[*] 检测到 task_for_pid 权限不足正在对微信重新签名...")
     print(f"    目标: {wechat_app}")
 
-    # 先尝试移除旧签名（非 sudo 可能失败但无害）
     subprocess.run(
         ["codesign", "--remove-signature", wechat_app],
         capture_output=True,
         timeout=30,
     )
 
-    # 提取并合并 entitlements
-    try:
-        ent_data = _build_entitlements_xml(wechat_app)
-    except Exception as e:
-        return False, f"提取微信原始权限失败: {e}"
-
-    ent_fd, ent_path = tempfile.mkstemp(suffix=".plist")
-    try:
-        with os.fdopen(ent_fd, "wb") as f:
-            f.write(ent_data)
-
-        result = subprocess.run(
-            ["codesign", "--force", "--sign", "-", "--entitlements", ent_path, wechat_app],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-    finally:
-        os.unlink(ent_path)
+    result = subprocess.run(
+        ["codesign", "--force", "--sign", "-", wechat_app],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
 
     if result.returncode != 0:
         return False, f"codesign 失败: {result.stderr.strip()}"
@@ -174,30 +160,18 @@ def extract_keys(db_dir, output_path, pid=None):
     combined_output = (result.stdout or "") + (result.stderr or "")
     if "task_for_pid" in combined_output:
         print("\n[!] task_for_pid 失败：macOS 安全策略阻止了进程内存访问。")
-        print("[!] 需要对微信重新签名以允许调试访问（不影响微信正常功能）。")
+        print("[!] 需要对微信重新签名以允许调试访问。")
 
         ok, err = _resign_wechat()
         if ok:
-            raise RuntimeError(
-                "已对微信重新签名（保留原有权限）。请执行以下步骤后重试：\n"
-                "  1. 退出微信（完全退出，不是最小化）\n"
-                "  2. 重新打开微信并登录\n"
-                "  3. 再次执行: sudo wechat-cli init"
-            )
+            print("[+] 签名成功，请重启微信后重试")
         else:
-            # 手动命令也需要保留原有权限
             raise RuntimeError(
-                f"自动签名失败: {err}\n"
-                "请手动执行以下命令后重试：\n"
-                "  # 1. 提取微信原有权限\n"
-                "  codesign -d --entitlements wechat_ent.plist /Applications/WeChat.app\n"
-                "  # 2. 用 PlistBuddy 添加 get-task-allow\n"
-                '  /usr/libexec/PlistBuddy -c "Add :com.apple.security.get-task-allow bool true" wechat_ent.plist\n'
-                "  # 3. 重新签名\n"
-                "  codesign --force --sign - --entitlements wechat_ent.plist /Applications/WeChat.app\n"
-                "  # 4. 清理\n"
-                "  rm wechat_ent.plist\n"
-                "然后重启微信，再执行: sudo wechat-cli init"
+                f"自动签名失败: {err}\n\n"
+                "请手动执行以下命令（需要 sudo 密码）：\n"
+                "  sudo codesign --remove-signature /Applications/WeChat.app\n"
+                "  sudo codesign --force --sign - /Applications/WeChat.app\n\n"
+                "然后重启微信（完全退出再打开），再运行 wechat-cli init\n"
             )
 
     # C 二进制输出 all_keys.json 到 work_dir
