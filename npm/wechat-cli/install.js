@@ -13,15 +13,22 @@ const PLATFORM_PACKAGES = {
 };
 
 const platformKey = `${process.platform}-${process.arch}`;
-const pkg = PLATFORM_PACKAGES[platformKey];
+const ext = process.platform === 'win32' ? '.exe' : '';
 
-if (!pkg) {
-  console.log(`wechat-cli: no binary for ${platformKey}, skipping`);
+const localBinary = path.join(__dirname, '..', 'platforms', platformKey, `bin/wechat-cli${ext}`);
+if (fs.existsSync(localBinary)) {
+  if (process.platform !== 'win32') {
+    fs.chmodSync(localBinary, 0o755);
+  }
+  console.log(`wechat-cli: using local build for ${platformKey}`);
   process.exit(0);
 }
 
-// Try to find and chmod the binary
-const ext = process.platform === 'win32' ? '.exe' : '';
+const pkg = PLATFORM_PACKAGES[platformKey];
+if (!pkg) {
+  console.log(`wechat-cli: no binary for ${platformKey}`);
+  process.exit(0);
+}
 
 try {
   const binaryPath = require.resolve(`${pkg}/bin/wechat-cli${ext}`);
@@ -30,7 +37,6 @@ try {
     console.log(`wechat-cli: set executable permission for ${platformKey}`);
   }
 } catch {
-  // Platform package was not installed (npm --no-optional or unsupported)
-  console.log(`wechat-cli: platform package ${pkg} not installed`);
-  console.log('To fix: npm install --force @canghe_ai/wechat-cli');
+  console.log(`wechat-cli: platform package ${pkg} not found`);
+  console.log('For local development: builds are in npm/platforms/<platform>/bin/');
 }
